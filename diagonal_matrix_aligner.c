@@ -114,7 +114,7 @@ result align_diagonal(char* query, char* target, int qlen, int tlen, int window_
     for(x = 0; x < window_size; x++) {
       qpos = y - xoffset[y] - x;
       tpos = x + xoffset[y];
-      if(qpos == qlen - 1 || tpos == tlen - 1) {
+      if((tpos >= 0 && qpos == qlen - 1) || (qpos > 0 && tpos == tlen - 1)) {
         if((max_y == 0 && max_x == 0) || score_matrix[y][x] > score_matrix[max_y][max_x]) {
           max_y = y;
           max_x = x;
