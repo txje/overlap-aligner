@@ -28,24 +28,25 @@ result align_diagonal(char* query, char* target, int qlen, int tlen, int window_
 
   for(y = 0; y < rows; y++) {
     row_max = 0;
-    xlim = y + 1 - xoffset[y];
+    xlim = y + 1 - xoffset[y]; // index of the first cell which goes outside the matrix
     if(window_size < xlim) xlim = window_size;
+    if(tlen - xoffset[y] < xlim) xlim = tlen - xoffset[y];
     for(x = 0; x < xlim; x++) { // do not evaluate parts of the row in the overflow/padding at the top of the matrix
       qpos = y - xoffset[y] - x;
       tpos = x + xoffset[y];
 
-      if(qpos >= qlen || tpos >= tlen)
+      if(qpos >= qlen)
         continue;
 
       if(y > 0) {
         xdiff = xoffset[y] - xoffset[y-1];
         // test for out of bounds for deletion
-        if(x-1+xdiff < 0 || x-1+xdiff >= window_size)
+        if(x-1+xdiff < 0 || x-1+xdiff >= xlim)
           deletion = LOW;
         else
           deletion = score_matrix[y-1][x-1+xdiff] + SCORES[DEL];
         // test for out of bounds for insertion
-        if(x+xdiff < 0 || x+xdiff >= window_size)
+        if(x+xdiff < 0 || x+xdiff >= xlim)
           insertion = LOW;
         else
           insertion = score_matrix[y-1][x+xdiff] + SCORES[INS];
@@ -57,7 +58,7 @@ result align_diagonal(char* query, char* target, int qlen, int tlen, int window_
       if(y > 1) {
         xdiff = xoffset[y] - xoffset[y-2];
         // test for out of bounds for match
-        if(x-1+xdiff < 0 || x-1+xdiff >= window_size)
+        if(x-1+xdiff < 0 || x-1+xdiff >= xlim)
           match = LOW;
         else if(query[qpos] == target[tpos])
           match = score_matrix[y-2][x-1+xdiff] + SCORES[MATCH];
