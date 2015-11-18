@@ -1,11 +1,25 @@
 
 // query along y-axis, target along x
-result align_full_matrix(char* query, char* target, int qlen, int tlen, charvec *path) {
+result align_full_matrix(char* query, char* target, int qlen, int tlen, charvec *path, int semilocal) {
 
-  int score_matrix[qlen][tlen];
-  unsigned char direction_matrix[qlen][tlen];
+  if(tlen == 0 || qlen == 0) {
+    result res;
+    res.failed = 1;
+    // other fields are unset and unreliable
+    return res;
+  }
+
+  // must be dynamically allocated to prevent stack overflows (on *some* systems)
+  int* score_matrix[qlen];
+  unsigned char* direction_matrix[qlen];
+  int i;
+  for(i = 0; i < qlen; i++) {
+    score_matrix[i] = (int*)malloc(tlen * sizeof(int));
+    direction_matrix[i] = (unsigned char*)malloc(tlen * sizeof(unsigned char));
+  }
 
   int x, y;
+  int max_x = 0, max_y = 0; // used to compute semilocal path (can pick best score that doesn't hit the end)
 
   for(y = 0; y < qlen; y++) {
     for(x = 0; x < tlen; x++) {
@@ -50,22 +64,29 @@ result align_full_matrix(char* query, char* target, int qlen, int tlen, charvec 
         score_matrix[y][x] = del_score;
         direction_matrix[y][x] = DEL;
       }
+
+      if(semilocal && score_matrix[y][x] > score_matrix[max_y][max_x]) {
+        max_y = y;
+        max_x = x;
+      }
     }
   }
 
   // compute maximum score position
-  int max_x = 0;
-  int max_y = qlen - 1;
-  for(x = 1; x < tlen; x++) { // check last row
-    if(score_matrix[qlen - 1][x] > score_matrix[max_y][max_x]) {
-      max_y = qlen - 1;
-      max_x = x;
+  if(!semilocal) { // global
+    max_x = 0;
+    max_y = qlen - 1;
+    for(x = 1; x < tlen; x++) { // check last row
+      if(score_matrix[qlen - 1][x] > score_matrix[max_y][max_x]) {
+        max_y = qlen - 1;
+        max_x = x;
+      }
     }
-  }
-  for(y = 0; y < qlen; y++) { // check last column
-    if(score_matrix[y][tlen - 1] > score_matrix[max_y][max_x]) {
-      max_y = y;
-      max_x = tlen - 1;
+    for(y = 0; y < qlen; y++) { // check last column
+      if(score_matrix[y][tlen - 1] > score_matrix[max_y][max_x]) {
+        max_y = y;
+        max_x = tlen - 1;
+      }
     }
   }
 
@@ -92,6 +113,13 @@ result align_full_matrix(char* query, char* target, int qlen, int tlen, charvec 
   res.qend = max_y;
   res.tstart = lastx;
   res.tend = max_x;
+  // end positions are INCLUSIVE
+
+  // free these up in case we'll be doing this repeatedly
+  for(i = 0; i < qlen; i++) {
+    free(score_matrix[i]);
+    free(direction_matrix[i]);
+  }
 
   return res;
 }

@@ -1,5 +1,12 @@
 
-result align_diagonal(char* query, char* target, int qlen, int tlen, int window_size, charvec *path) {
+result align_diagonal(char* query, char* target, int qlen, int tlen, int window_size, charvec *path, int semilocal) {
+
+  if(tlen == 0 || qlen == 0) {
+    result res;
+    res.failed = 1;
+    // other fields are unset and unreliable
+    return res;
+  }
 
   int rows = tlen + qlen - 1;
   int score_matrix[rows][window_size];
@@ -20,7 +27,9 @@ result align_diagonal(char* query, char* target, int qlen, int tlen, int window_
   // yoffset is implicitly the complement to the xoffset
 
   // fill in the matrix
-  int y, x;
+  int x, y;
+  int max_x = 0, max_y = 0; // used to compute semilocal path (can pick best score that doesn't hit the end)
+  int qend, tend; // easier to compute here if semilocal
   int row_max, xlim;
   int qpos, tpos;
   int match, insertion, deletion;
@@ -33,7 +42,7 @@ result align_diagonal(char* query, char* target, int qlen, int tlen, int window_
     if(tlen - xoffset[y] < xlim) xlim = tlen - xoffset[y];
     for(x = 0; x < xlim; x++) { // do not evaluate parts of the row in the overflow/padding at the top of the matrix
       qpos = y - xoffset[y] - x;
-      tpos = x + xoffset[y];
+      tpos = x + xoffset[y]; // this is, at some point, -41 !!!!!!!!!
 
       if(qpos >= qlen)
         continue;
@@ -89,6 +98,13 @@ result align_diagonal(char* query, char* target, int qlen, int tlen, int window_
       // keep track of maximum in this row
       if(score_matrix[y][x] > score_matrix[y][row_max])
         row_max = x;
+
+      if(semilocal && score_matrix[y][x] > score_matrix[max_y][max_x]) {
+        max_y = y;
+        max_x = x;
+        qend = qpos;
+        tend = tpos;
+      }
     }
 
     if(y < rows - 1) {
@@ -99,28 +115,29 @@ result align_diagonal(char* query, char* target, int qlen, int tlen, int window_
       xoffset[y+1] = xoffset[y];
       if(row_max >= window_size/2)
         xoffset[y+1]++;
-      if(xoffset[y+1] < 0) xoffset[y+1] = 0;
       if(xoffset[y+1] > tlen - window_size) xoffset[y+1] = tlen - window_size;
+      if(xoffset[y+1] < 0) xoffset[y+1] = 0;
     }
   }
 
   /*
    traceback
   */
-  int qstart, tstart, qend, tend;
-
-  // find the start position - this is tricky because our last "row" is not the set of terminal positions
-  int max_x = 0, max_y = 0;
-  for(y = rows-1; y > -1; y--) {
-    for(x = 0; x < window_size; x++) {
-      qpos = y - xoffset[y] - x;
-      tpos = x + xoffset[y];
-      if((tpos >= 0 && qpos == qlen - 1) || (qpos > 0 && tpos == tlen - 1)) {
-        if((max_y == 0 && max_x == 0) || score_matrix[y][x] > score_matrix[max_y][max_x]) {
-          max_y = y;
-          max_x = x;
-          qend = qpos;
-          tend = tpos;
+  if(!semilocal) { // global
+    // find the start position - this is tricky because our last "row" is not the set of terminal positions
+    max_x = 0;
+    max_y = 0;
+    for(y = rows-1; y > -1; y--) {
+      for(x = 0; x < window_size; x++) {
+        qpos = y - xoffset[y] - x;
+        tpos = x + xoffset[y];
+        if((tpos >= 0 && qpos == qlen - 1) || (qpos > 0 && tpos == tlen - 1)) {
+          if((max_y == 0 && max_x == 0) || score_matrix[y][x] > score_matrix[max_y][max_x]) {
+            max_y = y;
+            max_x = x;
+            qend = qpos;
+            tend = tpos;
+          }
         }
       }
     }
@@ -129,7 +146,9 @@ result align_diagonal(char* query, char* target, int qlen, int tlen, int window_
   // go backwards through matrix
   y = max_y;
   x = max_x;
-  while(y >= 0 && y - xoffset[y] - x >= 0) {
+  int qstart, tstart;
+
+  while(y >= 0 && y - xoffset[y] - x >= 0 && x + xoffset[y] >= 0) {
 
     tpos = x + xoffset[y];
     qpos = y - xoffset[y] - x;

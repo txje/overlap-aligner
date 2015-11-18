@@ -6,14 +6,14 @@
 
 typedef kvec_t(unsigned char) charvec;
 
-struct aln_result {
+typedef struct aln_result {
   int score;
   int qstart;
   int qend;
   int tstart;
   int tend;
-};
-typedef struct aln_result result;
+  int failed; // boolean flag
+} result;
 
 unsigned char MATCH = 0, INS = 1, DEL = 2, MISMATCH = 3;
 int SCORES[] = {1, -1, -1, -1}; // corresponds to events above
